@@ -175,12 +175,15 @@ public class BPlusTree {
 		}
 		else
 		{
+			long[] offsets = new long[childCount];
 			for(int i = 0; i < childCount; i++)
 			{
 				d.readFully(keySpace, 0, keySize);
 				long nodeOffset = d.readULong();
-				traverse(nodeOffset, d, kvAction, keySpace, valSpace);
+				offsets[i] = nodeOffset;
 			}
+			for(int i = 0; i < childCount; i++)
+				traverse(offsets[i], d, kvAction, keySpace, valSpace);
 		}
 	}
 

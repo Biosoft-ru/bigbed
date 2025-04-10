@@ -68,4 +68,22 @@ public class Test1 {
 
 		bb.close();
 	}
+	
+	@Test
+	public void test5() throws Exception
+	{
+		BigWigFile bw = new BigWigFile("test-data/test.bw");
+		bw.read();
+		List<WigEntry> res = bw.queryIntervals("chr1", 2500, 3100, 0);
+		
+		ChromInfo chrInfo = bw.getChromInfo("chr1");
+		
+		List<WigEntry> expected = Arrays.asList(
+				new WigEntry(chrInfo.id, 2300, 2600, -0.75),
+				new WigEntry(chrInfo.id, 2600, 2900, -0.5),
+				new WigEntry(chrInfo.id, 2900, 3200, -0.25));
+		assertThat(res, is(expected));
+		
+		bw.close();
+	}
 }

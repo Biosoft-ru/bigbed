@@ -27,7 +27,7 @@ public class TestExtraIndex {
 		bb.close();
 	}
 	
-	//@Test
+	@Test
 	//Input file too big for git
 	public void test2() throws ParseException, IOException {
 		BigBedFile bb = new BigBedFile("test-data/extra-index/C119_DPI_ROBUST.bb");

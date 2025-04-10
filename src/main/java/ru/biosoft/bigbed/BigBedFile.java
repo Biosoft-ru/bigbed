@@ -8,21 +8,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 
-public class BigBedFile implements AutoCloseable {
-	static final int VERSION = 4;
-	
-	String source;
-	DataSource dataSource;
-	Header header;
-	
-	public static final int MAX_ZOOM_LEVELS = 10;
-	public static final int ZOOM_INCREMENT = 4;
-	List<ZoomLevel> zoomLevels; 
-	
-	SummaryElement totalSummary;
-	
-	BPlusTree bPlusTree; 
-	RTreeIndex  rTree;
+public class BigBedFile extends BigFile<BedEntry> {
 	
 	//extension
 	int extensionSize;
@@ -39,208 +25,62 @@ public class BigBedFile implements AutoCloseable {
 		return res;
 	}
 	
-
 	BigBedFile(String source)
 	{
-		this.source = source;
-		dataSource = new RAFDataSource();
+		super(source);
 	}
 	
 	void read() throws IOException, ParseException
 	{
-		dataSource.open(source);
-		
-		header = new Header();
-		header.read(dataSource);
-
-		dataSource.seek(64);
-		zoomLevels = new ArrayList<>(header.zoomLevels);
-		for (int i = 0; i < header.zoomLevels; i++) {
-			ZoomLevel zoomLevel = new ZoomLevel();
-			zoomLevel.read(dataSource);
-			zoomLevels.add(zoomLevel);
-		}
-		
+		super.read();
+				
 		readAutoSql();
-		readTotalSummary();
 		readExtraIndices();
 		
 		dataSource.seek(header.unzoomedDataOffset);
 		siteCount = (int) dataSource.readULong();
-		
-		bPlusTree = new BPlusTree(dataSource, header.chromTreeOffset);
 	}
-	
-	private void readTotalSummary() throws IOException {
-		if(header.totalSummaryOffset == 0)
-			return;
-		dataSource.seek(header.totalSummaryOffset);
-		totalSummary = new SummaryElement();
-		totalSummary.read(dataSource);
-	}
-	
-	public SummaryElement getTotalSummary()
-	{
-		return totalSummary;
-	}
-
 
 	public int getSiteCount()
 	{
 		return siteCount;
 	}
 	
-	void initRTree() throws IOException
-	{
-		if(rTree == null)
-		{
-			rTree = new RTreeIndex();
-			rTree.read(dataSource, header.unzoomedIndexOffset);
+	@Override
+	protected boolean parseBlock(int chromId, int start, int end, int maxItems, ByteBuffer block, List<BedEntry> result) {
+		while(block.hasRemaining()) {
+			int resChrId = Utils.readUInt(block);
+			int resStart = Utils.readUInt(block);
+			int resEnd = Utils.readUInt(block);
+
+			block.mark();
+			int restLen = 0;
+			while(block.hasRemaining() && block.get() != 0)
+				restLen++;
+			
+			 if (resChrId == chromId
+		      && ( (resStart < end && resEnd > start)
+		                // Make sure to include zero-length insertion elements at start or end:
+		           || (resStart == resEnd && (resStart == end || resEnd == start))) )
+		     {
+		         BedEntry entry = new BedEntry(resChrId, resStart, resEnd);
+		         block.reset();
+		         entry.data = new byte[restLen];
+		         block.get(entry.data);
+		         block.get();//skip zero terminator
+		         result.add(entry);
+		         if(maxItems > 0 && result.size() >= maxItems)
+		        	 return false;
+		      }
+
 		}
-	}
-	
-	public List<BedEntry> queryIntervals(int chromId, int start, int end, int maxItems) throws IOException {
-
-		List<BedEntry> result = new ArrayList<>();
-		initRTree();
+		if(maxItems > 0 && result.size() >= maxItems)
+			return false;
+		return true;
 		
-		
-		
-		
-		int paddedStart = (start > 0) ? start-1 : start;
-		int paddedEnd = end+1;
-		
-		List<OffsetSize> blockList = new ArrayList<>();
-		rTree.findOverlappingBlocks(chromId, paddedStart, paddedEnd, dataSource, blockList::add);
-		
-		
-		byte[] uncompressedBuf = null;
-		if(header.uncompressBufSize > 0)
-			uncompressedBuf = new byte[header.uncompressBufSize];
-		
-		for (int iblock=0; iblock < blockList.size(); )
-	    {
-			/* Find contiguous blocks and read them into mergedBuf. */
-			int nBlocks = findContiguousBlocks(blockList, iblock);
-			OffsetSize firstBlock = blockList.get(iblock);
-			long mergedOffset = firstBlock.offset;
-			OffsetSize lastBlock = blockList.get(iblock+nBlocks-1);
-	        long mergedSize = lastBlock.offset + lastBlock.size - mergedOffset;
-	        if(mergedSize > Integer.MAX_VALUE)
-	        	throw new ParseException("Merged size too big: " + mergedSize);
-	    	dataSource.seek(mergedOffset);
-	    	byte[] mergedBuf = new byte[(int)mergedSize];
-	    	dataSource.readFully(mergedBuf, 0, (int)mergedSize);
-
-	    	for(int i = 0; i < nBlocks; i++)
-	    	{
-	    		byte[] buf;
-	    		int bufStart, bufLength;
-
-	    		OffsetSize curBlock = blockList.get(iblock+i);
-	    		
-	    		buf = mergedBuf;
-    			bufStart = (int)(curBlock.offset-firstBlock.offset);
-    			bufLength = (int)curBlock.size;
-    			
-	    		if(uncompressedBuf != null)
-	    		{
-	    			bufLength = Utils.uncompress(buf, bufStart, bufLength, uncompressedBuf);
-	    			buf = uncompressedBuf;
-	    			bufStart = 0;
-	    		}
-	    		
-	    		ByteBuffer bb = ByteBuffer.wrap(buf, bufStart, bufLength);
-	    		bb.order(dataSource.order());
-	    		
-	    		while(bb.hasRemaining()) {
-	    			int resChrId = Utils.readUInt(bb);
-	    			int resStart = Utils.readUInt(bb);
-	    			int resEnd = Utils.readUInt(bb);
-
-	    			bb.mark();
-	    			int restLen = 0;
-	    			while(bb.hasRemaining() && bb.get() != 0)
-	    				restLen++;
-	    			
-	    			 if (resChrId == chromId
-	    		      && ( (resStart < end && resEnd > start)
-	    		                // Make sure to include zero-length insertion elements at start or end:
-	    		           || (resStart == resEnd && (resStart == end || resEnd == start))) )
-	    		     {
-	    		         BedEntry entry = new BedEntry(resChrId, resStart, resEnd);
-	    		         bb.reset();
-	    		         entry.data = new byte[restLen];
-	    		         bb.get(entry.data);
-	    		         bb.get();//skip zero terminator
-	    		         result.add(entry);
-	    		         if(maxItems > 0 && result.size() >= maxItems)
-	    		        	 return result;
-	    		      }
-
-	    		}
-	    		
-	    	}
-	    	iblock += nBlocks;
-	    
-	    }
-		
-		return result;
-	}
-	
-	public List<BedEntry> queryIntervals(String chrom, int start, int end, int maxItems) throws IOException {
-		ChromInfo chrInfo = getChromInfo(chrom);
-		return queryIntervals(chrInfo.id, start, end, maxItems);
 	}
 	
 
-	//Return number of contiguous blocks starting at iblock
-	private int findContiguousBlocks(List<OffsetSize> blockList, int iblock) {
-		for(int i = iblock + 1; i < blockList.size(); i++)
-			if(blockList.get(i).offset != blockList.get(i-1).offset + blockList.get(i-1).size)
-				return i-iblock;
-		return blockList.size() - iblock;
-	}
-
-	
-	public ChromInfo getChromInfo(String chrom) throws IOException {
-		byte[] key = chrom.getBytes();
-		byte[] value = new byte[bPlusTree.valSize];
-		bPlusTree.find(key, value);
-		ChromInfo res = parseChromInfo(chrom, value);
-		return res;
-	}
-
-	public ChromInfo parseChromInfo(String chrom, byte[] value) {
-		ByteBuffer b = ByteBuffer.wrap(value);
-		b.order(dataSource.order());
-		int chromId = Utils.readUInt(b);
-		int chromSize = Utils.readUInt(b);
-		ChromInfo res =new ChromInfo();
-		res.id = chromId;
-		res.name = chrom;
-		res.length = chromSize;
-		return res;
-	}
-	
-	public void traverseChroms(Consumer<ChromInfo> action) throws IOException {
-		bPlusTree.traverse(dataSource, (k,v)->{
-			int nameLength = 0;
-			while(nameLength < k.length && k[nameLength] != 0)
-				nameLength++;
-			String chrom = new String(k, 0, nameLength);
-			ChromInfo chrInfo = parseChromInfo(chrom, v);
-			action.accept(chrInfo);
-		});
-	}
-	
-
-
-	public void close() throws IOException
-	{
-		dataSource.close();
-	}
-	
 	private AutoSql autoSql;
 	public AutoSql getAutoSql() {
 		return autoSql;
@@ -405,5 +245,10 @@ public class BigBedFile implements AutoCloseable {
 		}
 		
 		return result;			
+	}
+
+	@Override
+	protected int getFileMagic() {
+		return Header.MAGIC_BIGBED;
 	}
 }

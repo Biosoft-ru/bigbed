@@ -22,11 +22,11 @@ public class Header {
 	static int MAGIC_BIGBED = 0x8789F2EB;
 	static int MAGIC_BIGWIG = 0x888FFC26;
 	
-	void read(DataSource b) throws IOException
+	void read(DataSource b, int expectedMagic) throws IOException
 	{
 		magic = b.readInt();
-		if(magic != MAGIC_BIGBED)
-			if(Integer.reverseBytes(magic) == MAGIC_BIGBED)
+		if(magic != expectedMagic)
+			if(Integer.reverseBytes(magic) == expectedMagic)
 				b.setOrder(b.order() == ByteOrder.BIG_ENDIAN ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN);
 			else
 				throw new ParseException("Not a BigBed file, magic bytes 0x" + Integer.toHexString(magic));

@@ -122,13 +122,17 @@ public class RTreeIndex {
 		}
 		else
 		{
+			long[] offset = new long[childCount];
 			for (int i = 0; i < childCount; ++i) {
 				int startChromIdx = d.readUInt();
 				int startBase = d.readUInt();
 				int endChromIdx = d.readUInt();
 				int endBase = d.readUInt();
 				long childOffset = d.readULong();
-				traverseAllLeafs(childOffset, d, result);
+				offset[i] = childOffset;
+			}
+			for (int i = 0; i < childCount; ++i) {
+				traverseAllLeafs(offset[i], d, result);
 			}
 		}
 	}

@@ -1,5 +1,7 @@
 package ru.biosoft.bigbed;
 
+import java.nio.charset.StandardCharsets;
+
 public class BedEntry {
 	public BedEntry(int chrId, int start, int end) {
 		this.chrId = chrId;
@@ -9,6 +11,12 @@ public class BedEntry {
 	public int chrId;
 	public int start,end;//chromosome coordinates, zero based half-open
 	public byte[] data;
+	
+	
+	public String getRest()
+	{
+		return new String(data, StandardCharsets.UTF_8);
+	}
 	
 	@Override
 	public String toString() {
