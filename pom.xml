@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>ru.biosoft</groupId>
   <artifactId>bigbed</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
   <packaging>jar</packaging>
 	
   <description>Library for processing BigBed track files</description>

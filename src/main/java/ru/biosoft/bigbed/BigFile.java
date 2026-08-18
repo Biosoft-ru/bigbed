@@ -46,8 +46,6 @@ public abstract class BigFile<T> implements AutoCloseable {
 		
 		readTotalSummary();
 		
-		dataSource.seek(header.unzoomedDataOffset);
-		
 		bPlusTree = new BPlusTree(dataSource, header.chromTreeOffset);
 	}
 	

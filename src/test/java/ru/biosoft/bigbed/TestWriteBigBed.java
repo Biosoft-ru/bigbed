@@ -38,6 +38,29 @@ public class TestWriteBigBed {
 	}
 	
 	@Test
+	public void testEmpty() throws Exception {
+		BigBedWriterOptions options = new BigBedWriterOptions();
+		options.compress = false;
+		
+		List<ChromInfo> chrs = new ArrayList<>();
+		ChromInfo chr1 = new ChromInfo();
+		chr1.id = 0;
+		chr1.name = "chr1";
+		chr1.length = 1000;
+		chrs.add(chr1);
+		
+		
+		List<BedEntry> sites = new ArrayList<>();
+		
+		BigBedWriter.write(sites, chrs, new File("test-data/testEmpty_write.bb"), options);
+		
+		BigBedFile bb = BigBedFile.read("test-data/testEmpty_write.bb");
+		assertEquals(0, bb.getSiteCount());
+		assertThat(bb.queryIntervals("chr1", 0, 1000, 0), is(sites));
+	}
+	
+	
+	@Test
 	public void testCompress() throws Exception {
 		BigBedWriterOptions options = new BigBedWriterOptions();
 		options.compress = true;
