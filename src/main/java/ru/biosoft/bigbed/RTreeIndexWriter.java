@@ -35,6 +35,9 @@ public class RTreeIndexWriter {
 		out.writeInt(1);//items per slot
 		out.writeInt(0);//reserved
 		
+		if(rTree.root == null)
+			return;
+		
 		int[] levelSizes = new int[rTree.levelCount];
 		for (int i=0; i<rTree.levelCount; ++i)
 		    levelSizes[i] = 0;

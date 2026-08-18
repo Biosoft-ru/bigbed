@@ -47,6 +47,8 @@ public class RTreeIndex {
 	}
 
 	public void findOverlappingBlocks(long fileOffset, int chrId, int start, int end, DataSource d, Consumer<OffsetSize> result) throws IOException {
+		if(itemCount == 0)
+			return;
 		d.seek(fileOffset);
 		byte isLeaf = d.readByte();
 		byte reserved = d.readByte();
